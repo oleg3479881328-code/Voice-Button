@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Botton Dictation Button",
+  "version": "0.1.0",
+  "description": "Floating dictation button for text input on regular web pages.",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_title": "Botton Dictation Button"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

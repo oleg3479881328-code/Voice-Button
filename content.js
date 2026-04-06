@@ -1,0 +1,893 @@
+(() => {
+  const ROOT_ID = "botton-dictation-root";
+  const STORAGE_KEY = "launcherOffset";
+  const DEFAULT_OFFSET = { x: 14, y: 14 };
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  let root = null;
+  let micButton = null;
+  let closeButton = null;
+  let statusNode = null;
+  let dragHandle = null;
+  let visualizerNode = null;
+  let recognition = null;
+  let listening = false;
+  let dictationSessionActive = false;
+  let dictationRestartTimer = null;
+  let statusTimer = null;
+  let hideTimer = null;
+  let attachObserver = null;
+  let lastFocusedEditable = null;
+  let savedSelectionRange = null;
+  let currentAnchor = null;
+  let dismissedForPage = false;
+  let launcherOffset = { ...DEFAULT_OFFSET };
+
+  if (window.top !== window) {
+    return;
+  }
+
+  observeEditableFocus();
+  ensureUiMounted();
+  startMountObserver();
+  restoreSavedOffset();
+
+  window.addEventListener("resize", () => repositionLauncher());
+  window.addEventListener("scroll", () => repositionLauncher(), true);
+
+  function ensureUiMounted() {
+    if (root?.isConnected || document.getElementById(ROOT_ID)) {
+      root = document.getElementById(ROOT_ID) || root;
+      return;
+    }
+
+    const mountTarget = document.body || document.documentElement;
+    if (!mountTarget) {
+      window.addEventListener("DOMContentLoaded", ensureUiMounted, { once: true });
+      return;
+    }
+
+    injectUi(mountTarget);
+  }
+
+  function injectUi(mountTarget) {
+    root = document.createElement("div");
+    root.id = ROOT_ID;
+    root.innerHTML = `
+      <style>
+        #${ROOT_ID} {
+          position: fixed;
+          left: 0;
+          top: 0;
+          z-index: 2147483647;
+          width: max-content;
+          font-family: Arial, sans-serif;
+          color: #0f1720;
+          opacity: 0;
+          pointer-events: none;
+          transform: translateY(6px) scale(0.96);
+          transition: opacity 160ms ease, transform 160ms ease;
+        }
+        #${ROOT_ID}.is-visible {
+          opacity: 1;
+          pointer-events: auto;
+          transform: translateY(0) scale(1);
+        }
+        #${ROOT_ID} .botton-card {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        #${ROOT_ID} .botton-fab {
+          position: relative;
+          width: 48px;
+          height: 48px;
+          border: 0;
+          border-radius: 999px;
+          display: grid;
+          place-items: center;
+          color: #f8faf7;
+          background: linear-gradient(180deg, #1d7b66 0%, #125445 100%);
+          box-shadow: 0 16px 36px rgba(9, 30, 24, 0.24);
+          cursor: pointer;
+          user-select: none;
+          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+        #${ROOT_ID} .botton-fab:hover {
+          transform: translateY(-1px);
+        }
+        #${ROOT_ID} .botton-fab::before {
+          content: "";
+          position: absolute;
+          inset: -7px;
+          border-radius: 999px;
+          background: rgba(28, 160, 120, 0.18);
+          opacity: 0;
+          transform: scale(0.9);
+          transition: opacity 180ms ease, transform 180ms ease;
+          pointer-events: none;
+        }
+        #${ROOT_ID} .botton-fab.is-listening {
+          background: linear-gradient(180deg, #d45555 0%, #8c2323 100%);
+          box-shadow: 0 18px 46px rgba(121, 28, 28, 0.3);
+        }
+        #${ROOT_ID} .botton-fab.is-listening::before {
+          opacity: 1;
+          transform: scale(1);
+          animation: botton-pulse 1.2s ease-in-out infinite;
+        }
+        #${ROOT_ID} .botton-fab.is-error {
+          background: linear-gradient(180deg, #d48a2f 0%, #9c5e0d 100%);
+        }
+        #${ROOT_ID} .botton-drag {
+          position: absolute;
+          inset: 0;
+          border-radius: 999px;
+          cursor: grab;
+        }
+        #${ROOT_ID} .botton-drag:active {
+          cursor: grabbing;
+        }
+        #${ROOT_ID} .botton-icon {
+          position: relative;
+          width: 20px;
+          height: 20px;
+          pointer-events: none;
+        }
+        #${ROOT_ID} .botton-icon::before {
+          content: "";
+          position: absolute;
+          left: 5px;
+          top: 1px;
+          width: 10px;
+          height: 12px;
+          border: 2.2px solid currentColor;
+          border-bottom: 0;
+          border-radius: 8px 8px 6px 6px;
+        }
+        #${ROOT_ID} .botton-icon::after {
+          content: "";
+          position: absolute;
+          left: 9px;
+          top: 13px;
+          width: 2.2px;
+          height: 6px;
+          background: currentColor;
+          box-shadow: -5px 5px 0 -3px currentColor, 5px 5px 0 -3px currentColor;
+        }
+        #${ROOT_ID} .botton-close {
+          position: absolute;
+          top: -5px;
+          right: -5px;
+          width: 20px;
+          height: 20px;
+          border: 0;
+          border-radius: 999px;
+          display: grid;
+          place-items: center;
+          background: rgba(248, 250, 247, 0.98);
+          color: #526057;
+          box-shadow: 0 8px 18px rgba(12, 23, 18, 0.14);
+          font-size: 13px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        #${ROOT_ID} .botton-visualizer {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          min-width: 34px;
+          height: 20px;
+          padding: 7px 9px;
+          border-radius: 999px;
+          background: rgba(245, 248, 244, 0.96);
+          box-shadow: 0 10px 24px rgba(12, 23, 18, 0.12);
+          opacity: 0;
+          transform: translateX(-6px) scale(0.96);
+          transform-origin: left center;
+          pointer-events: none;
+          transition: opacity 180ms ease, transform 180ms ease;
+        }
+        #${ROOT_ID} .botton-visualizer.is-visible {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+        }
+        #${ROOT_ID} .botton-bar {
+          width: 3px;
+          height: 8px;
+          border-radius: 999px;
+          background: linear-gradient(180deg, #1d7b66 0%, #125445 100%);
+          transform-origin: center;
+        }
+        #${ROOT_ID} .botton-visualizer.is-listening .botton-bar {
+          animation: botton-bars 900ms ease-in-out infinite;
+        }
+        #${ROOT_ID} .botton-visualizer.is-listening .botton-bar:nth-child(2) { animation-delay: 120ms; }
+        #${ROOT_ID} .botton-visualizer.is-listening .botton-bar:nth-child(3) { animation-delay: 240ms; }
+        #${ROOT_ID} .botton-visualizer.is-listening .botton-bar:nth-child(4) { animation-delay: 360ms; }
+        #${ROOT_ID} .botton-visualizer.is-listening .botton-bar:nth-child(5) { animation-delay: 480ms; }
+        #${ROOT_ID} .botton-visualizer.is-error .botton-bar {
+          background: linear-gradient(180deg, #d48a2f 0%, #9c5e0d 100%);
+          height: 10px;
+        }
+        #${ROOT_ID} .botton-status {
+          position: absolute;
+          right: 0;
+          bottom: 60px;
+          max-width: 220px;
+          padding: 8px 10px;
+          border-radius: 14px;
+          background: rgba(249, 247, 240, 0.98);
+          box-shadow: 0 10px 28px rgba(12, 23, 18, 0.14);
+          font-size: 12px;
+          line-height: 1.35;
+          color: #32433a;
+          opacity: 0;
+          transform: translateY(8px);
+          pointer-events: none;
+          transition: opacity 180ms ease, transform 180ms ease;
+        }
+        #${ROOT_ID} .botton-status.is-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        @keyframes botton-bars {
+          0%, 100% { transform: scaleY(0.55); opacity: 0.45; }
+          50% { transform: scaleY(1.7); opacity: 1; }
+        }
+        @keyframes botton-pulse {
+          0%, 100% { opacity: 0.45; transform: scale(0.95); }
+          50% { opacity: 0.9; transform: scale(1.08); }
+        }
+      </style>
+      <div class="botton-card">
+        <button class="botton-fab" type="button" aria-label="Запустить диктовку" title="Диктовка">
+          <span class="botton-drag"></span>
+          <span class="botton-icon"></span>
+        </button>
+        <button class="botton-close" type="button" aria-label="Скрыть launcher" title="Скрыть">×</button>
+        <div class="botton-visualizer" aria-hidden="true">
+          <span class="botton-bar"></span>
+          <span class="botton-bar"></span>
+          <span class="botton-bar"></span>
+          <span class="botton-bar"></span>
+          <span class="botton-bar"></span>
+        </div>
+        <div class="botton-status" aria-live="polite">Сфокусируй текстовое поле и нажми на микрофон.</div>
+      </div>
+    `;
+
+    mountTarget.appendChild(root);
+
+    micButton = root.querySelector(".botton-fab");
+    closeButton = root.querySelector(".botton-close");
+    statusNode = root.querySelector(".botton-status");
+    visualizerNode = root.querySelector(".botton-visualizer");
+    dragHandle = root.querySelector(".botton-drag");
+
+    micButton.addEventListener("mousedown", preserveInputFocus, true);
+    micButton.addEventListener("pointerdown", preserveInputFocus, true);
+    micButton.addEventListener("click", () => toggleListening());
+
+    closeButton.addEventListener("click", () => {
+      stopListening();
+      dismissedForPage = true;
+      hideLauncherImmediately();
+    });
+
+    enableDragging(root, dragHandle);
+    syncUiState();
+    maybeShowForCurrentFocus();
+  }
+
+  function startMountObserver() {
+    if (attachObserver) {
+      return;
+    }
+
+    attachObserver = new MutationObserver(() => {
+      if (!document.getElementById(ROOT_ID)) {
+        ensureUiMounted();
+      }
+    });
+
+    attachObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  async function restoreSavedOffset() {
+    if (!chrome?.storage?.local) {
+      return;
+    }
+
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEY);
+      const saved = result?.[STORAGE_KEY];
+      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+        launcherOffset = saved;
+        repositionLauncher();
+      }
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  function maybeShowForCurrentFocus() {
+    const target = findInputTarget();
+    if (target) {
+      showLauncherForTarget(target);
+    }
+  }
+
+  async function toggleListening() {
+    if (dictationSessionActive) {
+      stopListening();
+      syncUiState();
+      updateStatus("Диктовка остановлена.");
+      return;
+    }
+
+    if (!SpeechRecognitionClass) {
+      flashErrorState();
+      updateStatus("В этом браузере нет SpeechRecognition API.");
+      return;
+    }
+
+    const initialInput = findInputTarget();
+    if (!initialInput) {
+      updateStatus("Активное поле не найдено.");
+      return;
+    }
+
+    dictationSessionActive = true;
+    syncUiState();
+    await startListeningCycle(initialInput);
+  }
+
+  function stopListening() {
+    dictationSessionActive = false;
+
+    if (dictationRestartTimer) {
+      clearTimeout(dictationRestartTimer);
+      dictationRestartTimer = null;
+    }
+
+    if (recognition) {
+      try {
+        recognition.stop();
+      } catch (_error) {
+        // ignore
+      }
+    }
+
+    listening = false;
+    recognition = null;
+  }
+
+  async function startListeningCycle(initialInput = null) {
+    recognition = new SpeechRecognitionClass();
+    recognition.lang = document.documentElement.lang || navigator.language || "ru-RU";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      listening = true;
+      syncUiState();
+      updateStatus("Слушаю.");
+    };
+
+    recognition.onresult = async (event) => {
+      const transcript = Array.from(event.results)
+        .filter((result) => result.isFinal)
+        .map((result) => result[0]?.transcript?.trim() || "")
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      if (!transcript) {
+        return;
+      }
+
+      const liveInput = findInputTarget() || initialInput;
+      const inserted = appendTextToInput(liveInput, transcript);
+
+      if (inserted) {
+        updateStatus("Текст вставлен.");
+        return;
+      }
+
+      const copied = await copyTextToClipboard(transcript);
+      updateStatus(copied
+        ? "Поле не найдено. Текст скопирован в буфер."
+        : "Не удалось вставить текст. Сфокусируй поле и попробуй снова.");
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === "aborted" && !dictationSessionActive) {
+        return;
+      }
+
+      flashErrorState();
+      updateStatus(mapRecognitionError(event.error));
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      recognition = null;
+      syncUiState();
+
+      if (!dictationSessionActive) {
+        scheduleHideCheck();
+        return;
+      }
+
+      dictationRestartTimer = setTimeout(() => {
+        dictationRestartTimer = null;
+        if (dictationSessionActive) {
+          startListeningCycle(findInputTarget() || initialInput).catch((error) => {
+            dictationSessionActive = false;
+            listening = false;
+            recognition = null;
+            flashErrorState();
+            syncUiState();
+            updateStatus(error.message || "Не удалось перезапустить диктовку.");
+          });
+        }
+      }, 150);
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      recognition = null;
+      listening = false;
+      dictationSessionActive = false;
+      flashErrorState();
+      syncUiState();
+      updateStatus(error.message || "Не удалось запустить распознавание речи.");
+    }
+  }
+
+  function syncUiState() {
+    if (!micButton || !visualizerNode) {
+      return;
+    }
+
+    const active = dictationSessionActive || listening;
+    micButton.classList.toggle("is-listening", active);
+    micButton.classList.remove("is-error");
+    micButton.setAttribute("aria-label", active ? "Остановить диктовку" : "Запустить диктовку");
+    micButton.setAttribute("title", active ? "Остановить диктовку" : "Запустить диктовку");
+
+    visualizerNode.classList.toggle("is-visible", active);
+    visualizerNode.classList.toggle("is-listening", active);
+    visualizerNode.classList.remove("is-error");
+  }
+
+  function updateStatus(text) {
+    if (!statusNode) {
+      return;
+    }
+
+    statusNode.textContent = text;
+    statusNode.classList.add("is-visible");
+
+    if (statusTimer) {
+      clearTimeout(statusTimer);
+    }
+
+    statusTimer = setTimeout(() => {
+      if (dictationSessionActive) {
+        statusNode.textContent = "Диктовка активна.";
+        return;
+      }
+
+      statusNode.classList.remove("is-visible");
+    }, 2200);
+  }
+
+  function observeEditableFocus() {
+    document.addEventListener("focusin", (event) => {
+      const target = event.target;
+      if (isEditableTarget(target)) {
+        lastFocusedEditable = target;
+        dismissedForPage = false;
+        showLauncherForTarget(target);
+      }
+    }, true);
+
+    document.addEventListener("focusout", () => {
+      scheduleHideCheck();
+    }, true);
+
+    document.addEventListener("selectionchange", () => {
+      const selection = window.getSelection?.();
+      if (!selection || selection.rangeCount === 0) {
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const element = container instanceof Element ? container : container?.parentElement;
+      const editable = element?.closest?.("[contenteditable='true'], [role='textbox']");
+      if (editable && isEditableTarget(editable)) {
+        savedSelectionRange = range.cloneRange();
+      }
+    }, true);
+  }
+
+  function showLauncherForTarget(target) {
+    if (dismissedForPage || !root?.isConnected || !isEditableTarget(target)) {
+      return;
+    }
+
+    currentAnchor = target;
+    repositionLauncher();
+    root.classList.add("is-visible");
+  }
+
+  function scheduleHideCheck() {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+    }
+
+    hideTimer = setTimeout(() => {
+      if (dictationSessionActive || listening) {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (isEditableTarget(active)) {
+        showLauncherForTarget(active);
+        return;
+      }
+
+      hideLauncherImmediately();
+    }, 140);
+  }
+
+  function hideLauncherImmediately() {
+    root?.classList.remove("is-visible");
+    currentAnchor = null;
+    if (statusNode) {
+      statusNode.classList.remove("is-visible");
+    }
+  }
+
+  function repositionLauncher() {
+    if (!root?.isConnected || !currentAnchor || !isEditableTarget(currentAnchor)) {
+      return;
+    }
+
+    const rect = currentAnchor.getBoundingClientRect();
+    const left = rect.right - root.offsetWidth + launcherOffset.x;
+    const top = rect.bottom + launcherOffset.y;
+    moveRootTo(root, left, top);
+  }
+
+  function findInputTarget() {
+    const active = document.activeElement;
+    if (isEditableTarget(active)) {
+      return active;
+    }
+
+    if (isEditableTarget(lastFocusedEditable)) {
+      return lastFocusedEditable;
+    }
+
+    const selectors = [
+      "textarea",
+      "[contenteditable='true']",
+      "[role='textbox']",
+      "input[type='text']",
+      "input[type='search']"
+    ];
+
+    for (const selector of selectors) {
+      const nodes = Array.from(document.querySelectorAll(selector));
+      const target = nodes.find((node) => isPromptLikeTarget(node));
+      if (target) {
+        return target;
+      }
+    }
+
+    return null;
+  }
+
+  function appendTextToInput(target, transcript) {
+    if (!target) {
+      return false;
+    }
+
+    const currentValue = readInputValue(target);
+    const prefix = currentValue.trim() ? " " : "";
+    const nextValue = `${currentValue}${prefix}${transcript}`.trim();
+
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      target.focus();
+      setNativeInputValue(target, nextValue);
+      const caretPosition = target.value.length;
+      if (typeof target.setSelectionRange === "function") {
+        target.setSelectionRange(caretPosition, caretPosition);
+      }
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+
+    target.focus();
+    restoreSelection(target);
+    placeCaretAtEnd(target);
+    const inserted = tryInsertText(prefix + transcript);
+    if (!inserted) {
+      target.textContent = nextValue;
+    }
+    target.dispatchEvent(new InputEvent("input", { bubbles: true, data: transcript, inputType: "insertText" }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function readInputValue(target) {
+    if (!target) {
+      return "";
+    }
+
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      return target.value || "";
+    }
+
+    return target.textContent || "";
+  }
+
+  function isEditableTarget(node) {
+    if (!(node instanceof HTMLElement) || !isVisible(node)) {
+      return false;
+    }
+
+    if (node instanceof HTMLTextAreaElement) {
+      return true;
+    }
+
+    if (node instanceof HTMLInputElement) {
+      return ["text", "search", ""].includes(node.type);
+    }
+
+    return node.isContentEditable || node.getAttribute("role") === "textbox";
+  }
+
+  function isPromptLikeTarget(node) {
+    if (!isEditableTarget(node) || !(node instanceof HTMLElement)) {
+      return false;
+    }
+
+    const label = [
+      node.getAttribute("aria-label"),
+      node.getAttribute("placeholder"),
+      node.getAttribute("data-placeholder"),
+      node.textContent
+    ].join(" ").toLowerCase();
+
+    if (label.includes("search")) {
+      return false;
+    }
+
+    const rect = node.getBoundingClientRect();
+    return rect.bottom >= window.innerHeight * 0.25;
+  }
+
+  function isVisible(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      rect.width > 0 &&
+      rect.height > 0;
+  }
+
+  function mapRecognitionError(code) {
+    switch (code) {
+      case "not-allowed":
+        return "Браузер не дал доступ к микрофону.";
+      case "no-speech":
+        return "Речь не распознана. Попробуй еще раз.";
+      case "audio-capture":
+        return "Не удалось получить звук с микрофона.";
+      case "network":
+        return "Ошибка распознавания речи. Проверь соединение.";
+      default:
+        return "Не удалось распознать речь.";
+    }
+  }
+
+  function setNativeInputValue(element, value) {
+    const prototype = element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+    descriptor?.set?.call(element, value);
+  }
+
+  function placeCaretAtEnd(target) {
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function tryInsertText(text) {
+    if (typeof document.execCommand === "function") {
+      try {
+        return document.execCommand("insertText", false, text);
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  function preserveInputFocus(event) {
+    const target = findInputTarget();
+    if (target) {
+      lastFocusedEditable = target;
+      currentAnchor = target;
+    }
+
+    event.preventDefault();
+  }
+
+  function restoreSelection(target) {
+    if (!savedSelectionRange || !(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!(target.isContentEditable || target.getAttribute("role") === "textbox")) {
+      return;
+    }
+
+    const selection = window.getSelection?.();
+    if (!selection) {
+      return;
+    }
+
+    try {
+      selection.removeAllRanges();
+      selection.addRange(savedSelectionRange);
+    } catch (_error) {
+      // ignore invalid saved range
+    }
+  }
+
+  function flashErrorState() {
+    if (!micButton || !visualizerNode) {
+      return;
+    }
+
+    micButton.classList.add("is-error");
+    visualizerNode.classList.add("is-visible", "is-error");
+    visualizerNode.classList.remove("is-listening");
+
+    setTimeout(() => {
+      if (!dictationSessionActive && !listening && micButton && visualizerNode) {
+        micButton.classList.remove("is-error");
+        visualizerNode.classList.remove("is-error");
+        if (!dictationSessionActive && !listening) {
+          visualizerNode.classList.remove("is-visible");
+        }
+      }
+    }, 1400);
+  }
+
+  async function copyTextToClipboard(text) {
+    if (!text || !navigator.clipboard?.writeText) {
+      return false;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function enableDragging(container, handle) {
+    if (!container || !handle) {
+      return;
+    }
+
+    let dragState = null;
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (!currentAnchor || !root?.isConnected) {
+        return;
+      }
+
+      const rootRect = container.getBoundingClientRect();
+      const anchorRect = currentAnchor.getBoundingClientRect();
+
+      dragState = {
+        shiftX: event.clientX - rootRect.left,
+        shiftY: event.clientY - rootRect.top,
+        anchorLeft: anchorRect.right - rootRect.width,
+        anchorTop: anchorRect.bottom
+      };
+
+      handle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+
+    handle.addEventListener("pointermove", (event) => {
+      if (!dragState || !container.isConnected) {
+        return;
+      }
+
+      const nextLeft = event.clientX - dragState.shiftX;
+      const nextTop = event.clientY - dragState.shiftY;
+      launcherOffset = {
+        x: nextLeft - dragState.anchorLeft,
+        y: nextTop - dragState.anchorTop
+      };
+
+      moveRootTo(container, nextLeft, nextTop);
+      event.preventDefault();
+    });
+
+    const finishDrag = async (event) => {
+      if (!dragState || !container.isConnected) {
+        return;
+      }
+
+      dragState = null;
+      handle.releasePointerCapture?.(event.pointerId);
+      await saveOffset();
+      repositionLauncher();
+      event.preventDefault();
+    };
+
+    handle.addEventListener("pointerup", finishDrag);
+    handle.addEventListener("pointercancel", finishDrag);
+  }
+
+  async function saveOffset() {
+    if (!chrome?.storage?.local) {
+      return;
+    }
+
+    try {
+      await chrome.storage.local.set({
+        [STORAGE_KEY]: launcherOffset
+      });
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  function moveRootTo(container, left, top) {
+    const maxLeft = Math.max(12, window.innerWidth - container.offsetWidth - 12);
+    const maxTop = Math.max(12, window.innerHeight - container.offsetHeight - 12);
+    const clampedLeft = clamp(left, 12, maxLeft);
+    const clampedTop = clamp(top, 12, maxTop);
+
+    container.style.left = `${clampedLeft}px`;
+    container.style.top = `${clampedTop}px`;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+})();
