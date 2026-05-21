@@ -410,6 +410,14 @@
       return;
     }
 
+    try {
+      await ensureMicrophoneAccess();
+    } catch (error) {
+      flashErrorState();
+      updateStatus(error.message || "Не удалось получить доступ к микрофону.");
+      return;
+    }
+
     dictationSessionActive = true;
     syncUiState();
     await startListeningCycle(initialInput);
@@ -781,7 +789,7 @@
   function mapRecognitionError(code) {
     switch (code) {
       case "not-allowed":
-        return "Браузер не дал доступ к микрофону.";
+        return "Микрофон не доступен. Разреши доступ для сайта и Chrome.";
       case "no-speech":
         return "Речь не распознана. Попробуй еще раз.";
       case "audio-capture":
@@ -791,6 +799,36 @@
       default:
         return "Не удалось распознать речь.";
     }
+  }
+
+  async function ensureMicrophoneAccess() {
+    if (!window.isSecureContext) {
+      throw new Error("Микрофон работает только на защищенных страницах HTTPS.");
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("В этом браузере недоступен доступ к микрофону.");
+    }
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      switch (error?.name) {
+        case "NotAllowedError":
+        case "SecurityError":
+          throw new Error("Chrome или Windows не дали доступ к микрофону.");
+        case "NotFoundError":
+          throw new Error("Микрофон не найден.");
+        case "NotReadableError":
+        case "AbortError":
+          throw new Error("Микрофон занят другим приложением или недоступен.");
+        default:
+          throw new Error("Не удалось открыть микрофон.");
+      }
+    }
+
+    stream.getTracks().forEach((track) => track.stop());
   }
 
   async function cycleLanguageMode() {
