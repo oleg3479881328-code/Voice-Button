@@ -5,8 +5,8 @@
   const DOMAIN_LANGUAGE_KEY = "domainLanguageMemory";
   const LAST_SUCCESSFUL_LANGUAGE_KEY = "lastSuccessfulLanguage";
   const DEFAULT_OFFSET = { x: 14, y: 14 };
-  const DEFAULT_LANGUAGE_MODE = "auto";
-  const LANGUAGE_OPTIONS = ["auto", "ru-RU", "en-US"];
+  const DEFAULT_LANGUAGE_MODE = "ru-RU";
+  const LANGUAGE_OPTIONS = ["ru-RU", "en-US", "auto"];
   const EDITABLE_INPUT_TYPES = new Set(["", "text", "search", "url", "tel", "email", "number"]);
   const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -281,7 +281,7 @@
           <span class="botton-drag"></span>
           <span class="botton-icon"></span>
         </button>
-        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">AUTO</button>
+        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
         <button class="botton-close" type="button" aria-label="Скрыть launcher" title="Скрыть">×</button>
         <div class="botton-visualizer" aria-hidden="true">
           <span class="botton-bar"></span>
