@@ -2,6 +2,7 @@
   const ROOT_ID = "botton-dictation-root";
   const STORAGE_KEY = "launcherOffset";
   const DEFAULT_OFFSET = { x: 14, y: 14 };
+  const EDITABLE_INPUT_TYPES = new Set(["", "text", "search", "url", "tel", "email", "number"]);
   const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   let root = null;
@@ -492,8 +493,8 @@
 
   function observeEditableFocus() {
     document.addEventListener("focusin", (event) => {
-      const target = event.target;
-      if (isEditableTarget(target)) {
+      const target = getEditableTarget(event.target);
+      if (target) {
         lastFocusedEditable = target;
         dismissedForPage = false;
         showLauncherForTarget(target);
@@ -521,11 +522,12 @@
   }
 
   function showLauncherForTarget(target) {
-    if (dismissedForPage || !root?.isConnected || !isEditableTarget(target)) {
+    const editableTarget = getEditableTarget(target);
+    if (dismissedForPage || !root?.isConnected || !editableTarget) {
       return;
     }
 
-    currentAnchor = target;
+    currentAnchor = editableTarget;
     repositionLauncher();
     root.classList.add("is-visible");
   }
@@ -570,9 +572,10 @@
   }
 
   function findInputTarget() {
-    const active = document.activeElement;
-    if (isEditableTarget(active)) {
-      return active;
+    const active = getDeepActiveElement();
+    const activeTarget = getEditableTarget(active);
+    if (activeTarget) {
+      return activeTarget;
     }
 
     if (isEditableTarget(lastFocusedEditable)) {
@@ -581,10 +584,9 @@
 
     const selectors = [
       "textarea",
-      "[contenteditable='true']",
-      "[role='textbox']",
-      "input[type='text']",
-      "input[type='search']"
+      "input",
+      "[contenteditable]",
+      "[role='textbox']"
     ];
 
     for (const selector of selectors) {
@@ -599,6 +601,7 @@
   }
 
   function appendTextToInput(target, transcript) {
+    target = getEditableTarget(target);
     if (!target) {
       return false;
     }
@@ -609,9 +612,11 @@
 
     if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
       target.focus();
-      setNativeInputValue(target, nextValue);
-      const caretPosition = target.value.length;
-      if (typeof target.setSelectionRange === "function") {
+      const selection = getTextControlSelection(target);
+      const nextText = buildInsertedText(currentValue, transcript, selection.start, selection.end);
+      setNativeInputValue(target, nextText.value);
+      if (typeof target.setSelectionRange === "function" && selection.hasSelectionApi) {
+        const caretPosition = nextText.caret;
         target.setSelectionRange(caretPosition, caretPosition);
       }
       target.dispatchEvent(new Event("input", { bubbles: true }));
@@ -620,8 +625,9 @@
     }
 
     target.focus();
-    restoreSelection(target);
-    placeCaretAtEnd(target);
+    if (!restoreSelection(target)) {
+      placeCaretAtEnd(target);
+    }
     const inserted = tryInsertText(prefix + transcript);
     if (!inserted) {
       target.textContent = nextValue;
@@ -644,19 +650,7 @@
   }
 
   function isEditableTarget(node) {
-    if (!(node instanceof HTMLElement) || !isVisible(node)) {
-      return false;
-    }
-
-    if (node instanceof HTMLTextAreaElement) {
-      return true;
-    }
-
-    if (node instanceof HTMLInputElement) {
-      return ["text", "search", ""].includes(node.type);
-    }
-
-    return node.isContentEditable || node.getAttribute("role") === "textbox";
+    return Boolean(getEditableTarget(node));
   }
 
   function isPromptLikeTarget(node) {
@@ -715,6 +709,65 @@
     descriptor?.set?.call(element, value);
   }
 
+  function getDeepActiveElement() {
+    let active = document.activeElement;
+    while (active?.shadowRoot?.activeElement) {
+      active = active.shadowRoot.activeElement;
+    }
+    return active;
+  }
+
+  function getEditableTarget(node) {
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+
+    if (node instanceof HTMLTextAreaElement) {
+      return isVisible(node) ? node : null;
+    }
+
+    if (node instanceof HTMLInputElement) {
+      return EDITABLE_INPUT_TYPES.has(node.type) && isVisible(node) ? node : null;
+    }
+
+    const editable = node.closest("[contenteditable], [role='textbox']");
+    if (editable instanceof HTMLElement && isVisible(editable)) {
+      if (editable.isContentEditable || editable.getAttribute("role") === "textbox") {
+        return editable;
+      }
+    }
+
+    return null;
+  }
+
+  function getTextControlSelection(target) {
+    try {
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        return { start, end, hasSelectionApi: true };
+      }
+    } catch (_error) {
+      // Some input types do not expose text selection APIs.
+    }
+
+    const length = target.value?.length || 0;
+    return { start: length, end: length, hasSelectionApi: false };
+  }
+
+  function buildInsertedText(currentValue, transcript, start, end) {
+    const left = currentValue.slice(0, start);
+    const right = currentValue.slice(end);
+    const prefix = left && !/\s$/.test(left) ? " " : "";
+    const suffix = right && !/^\s/.test(right) ? " " : "";
+    const inserted = `${prefix}${transcript}${suffix}`;
+
+    return {
+      value: `${left}${inserted}${right}`,
+      caret: `${left}${inserted}`.length
+    };
+  }
+
   function placeCaretAtEnd(target) {
     const selection = window.getSelection();
     if (!selection) {
@@ -752,24 +805,27 @@
 
   function restoreSelection(target) {
     if (!savedSelectionRange || !(target instanceof HTMLElement)) {
-      return;
+      return false;
     }
 
     if (!(target.isContentEditable || target.getAttribute("role") === "textbox")) {
-      return;
+      return false;
     }
 
     const selection = window.getSelection?.();
     if (!selection) {
-      return;
+      return false;
     }
 
     try {
       selection.removeAllRanges();
       selection.addRange(savedSelectionRange);
+      return true;
     } catch (_error) {
       // ignore invalid saved range
     }
+
+    return false;
   }
 
   function flashErrorState() {

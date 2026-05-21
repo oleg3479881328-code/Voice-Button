@@ -1,32 +1,24 @@
-# Botton Dictation Button
+# Voice Button
 
-MVP Chrome extension with a floating dictation button for regular web pages.
+Chrome extension with a floating voice dictation button for regular web pages.
 
-## Что умеет
+## What It Does
 
-- показывает на `http/https` страницах минималистичный launcher рядом с активным текстовым полем;
-- рядом с кнопкой во время записи появляется визуализатор;
-- launcher можно немного перетащить, и его смещение относительно поля сохраняется между страницами;
-- есть крестик для скрытия кнопки на текущей странице;
-- запускает распознавание речи через `SpeechRecognition` / `webkitSpeechRecognition`;
-- вставляет текст в активное или последнее сфокусированное поле ввода;
-- если поле не найдено, пытается скопировать текст в буфер обмена;
-- после паузы автоматически перезапускает распознавание, пока не нажать `Стоп`.
+- Shows a microphone button next to focused text fields.
+- Uses the browser `SpeechRecognition` / `webkitSpeechRecognition` API.
+- Inserts dictated text into text inputs, textareas, and common editable web editors.
+- Lets the launcher be moved and hidden on a page.
 
-## Как запустить
+## Install Locally
 
-1. Открой `chrome://extensions`.
-2. Включи `Developer mode`.
-3. Нажми `Load unpacked`.
-4. Выбери папку `C:\Users\oleg3\OneDrive\Documents\_PROJECTS\Botton`.
-5. Открой обычную `http/https` страницу.
-6. Сфокусируй текстовое поле на обычной веб-странице.
-7. Launcher появится рядом с полем, нажми на кнопку с микрофоном.
-8. Если нужно, немного сдвинь launcher перетаскиванием, или скрой его крестиком.
+1. Open `chrome://extensions`.
+2. Enable `Developer mode`.
+3. Click `Load unpacked`.
+4. Select this project folder.
+5. Open an `http` or `https` page and focus a text field.
 
-## Ограничения MVP
+## Limits
 
-- не работает на `chrome://` страницах и в Chrome Web Store;
-- не может появляться в адресной строке Chrome, потому что это UI браузера, а не DOM веб-страницы;
-- зависит от поддержки Web Speech API в Chrome;
-- качество вставки зависит от конкретного сайта и его поля ввода.
+- Does not work on `chrome://` pages or the Chrome Web Store.
+- Works inside browser pages, not native Windows applications.
+- Depends on Chrome's Web Speech API support.
