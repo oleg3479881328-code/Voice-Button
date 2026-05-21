@@ -1,24 +1,24 @@
 # Voice Button
 
-Chrome extension with a floating voice dictation button for regular web pages.
+Chrome-расширение с плавающей кнопкой голосовой диктовки для обычных веб-страниц.
 
-## What It Does
+## Что делает
 
-- Shows a microphone button next to focused text fields.
-- Uses the browser `SpeechRecognition` / `webkitSpeechRecognition` API.
-- Inserts dictated text into text inputs, textareas, and common editable web editors.
-- Lets the launcher be moved and hidden on a page.
+- Показывает кнопку микрофона рядом с активным текстовым полем.
+- Использует браузерный API `SpeechRecognition` / `webkitSpeechRecognition`.
+- Вставляет продиктованный текст в `input`, `textarea` и распространенные веб-редакторы.
+- Позволяет перемещать кнопку и скрывать ее на странице.
 
-## Install Locally
+## Локальная установка
 
-1. Open `chrome://extensions`.
-2. Enable `Developer mode`.
-3. Click `Load unpacked`.
-4. Select this project folder.
-5. Open an `http` or `https` page and focus a text field.
+1. Открой `chrome://extensions`.
+2. Включи `Developer mode`.
+3. Нажми `Load unpacked`.
+4. Выбери папку проекта.
+5. Открой страницу `http` или `https` и сфокусируй текстовое поле.
 
-## Limits
+## Ограничения
 
-- Does not work on `chrome://` pages or the Chrome Web Store.
-- Works inside browser pages, not native Windows applications.
-- Depends on Chrome's Web Speech API support.
+- Не работает на страницах `chrome://` и в Chrome Web Store.
+- Работает внутри веб-страниц браузера, а не в Windows-приложениях.
+- Зависит от поддержки Web Speech API в Chrome.
