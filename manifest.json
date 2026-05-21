@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Botton Dictation Button",
-  "version": "0.1.0",
-  "description": "Floating dictation button for text input on regular web pages.",
+  "name": "Voice Button",
+  "version": "0.2.0",
+  "description": "Floating voice dictation button for text input on regular web pages.",
   "permissions": [
     "storage"
   ],
   "action": {
-    "default_title": "Botton Dictation Button"
+    "default_title": "Voice Button"
   },
   "content_scripts": [
     {

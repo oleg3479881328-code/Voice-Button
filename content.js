@@ -1,12 +1,18 @@
 (() => {
   const ROOT_ID = "botton-dictation-root";
   const STORAGE_KEY = "launcherOffset";
+  const LANGUAGE_MODE_KEY = "languageMode";
+  const DOMAIN_LANGUAGE_KEY = "domainLanguageMemory";
+  const LAST_SUCCESSFUL_LANGUAGE_KEY = "lastSuccessfulLanguage";
   const DEFAULT_OFFSET = { x: 14, y: 14 };
+  const DEFAULT_LANGUAGE_MODE = "auto";
+  const LANGUAGE_OPTIONS = ["auto", "ru-RU", "en-US"];
   const EDITABLE_INPUT_TYPES = new Set(["", "text", "search", "url", "tel", "email", "number"]);
   const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   let root = null;
   let micButton = null;
+  let languageButton = null;
   let closeButton = null;
   let statusNode = null;
   let dragHandle = null;
@@ -23,6 +29,10 @@
   let currentAnchor = null;
   let dismissedForPage = false;
   let launcherOffset = { ...DEFAULT_OFFSET };
+  let languageMode = DEFAULT_LANGUAGE_MODE;
+  let domainLanguageMemory = {};
+  let lastSuccessfulLanguage = null;
+  let currentRecognitionLanguage = null;
 
   if (window.top !== window) {
     return;
@@ -32,6 +42,7 @@
   ensureUiMounted();
   startMountObserver();
   restoreSavedOffset();
+  restoreSavedLanguageSettings();
 
   window.addEventListener("resize", () => repositionLauncher());
   window.addEventListener("scroll", () => repositionLauncher(), true);
@@ -174,6 +185,28 @@
           line-height: 1;
           cursor: pointer;
         }
+        #${ROOT_ID} .botton-language {
+          min-width: 46px;
+          height: 28px;
+          border: 0;
+          border-radius: 999px;
+          padding: 0 10px;
+          background: rgba(248, 250, 247, 0.98);
+          color: #29453b;
+          box-shadow: 0 10px 24px rgba(12, 23, 18, 0.12);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          cursor: pointer;
+          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+        #${ROOT_ID} .botton-language:hover {
+          transform: translateY(-1px);
+        }
+        #${ROOT_ID} .botton-language.is-active {
+          background: rgba(232, 243, 238, 0.98);
+          color: #125445;
+        }
         #${ROOT_ID} .botton-visualizer {
           display: flex;
           align-items: center;
@@ -247,6 +280,7 @@
           <span class="botton-drag"></span>
           <span class="botton-icon"></span>
         </button>
+        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">AUTO</button>
         <button class="botton-close" type="button" aria-label="Скрыть launcher" title="Скрыть">×</button>
         <div class="botton-visualizer" aria-hidden="true">
           <span class="botton-bar"></span>
@@ -262,6 +296,7 @@
     mountTarget.appendChild(root);
 
     micButton = root.querySelector(".botton-fab");
+    languageButton = root.querySelector(".botton-language");
     closeButton = root.querySelector(".botton-close");
     statusNode = root.querySelector(".botton-status");
     visualizerNode = root.querySelector(".botton-visualizer");
@@ -270,6 +305,9 @@
     micButton.addEventListener("mousedown", preserveInputFocus, true);
     micButton.addEventListener("pointerdown", preserveInputFocus, true);
     micButton.addEventListener("click", () => toggleListening());
+    languageButton.addEventListener("mousedown", preserveInputFocus, true);
+    languageButton.addEventListener("pointerdown", preserveInputFocus, true);
+    languageButton.addEventListener("click", () => cycleLanguageMode());
 
     closeButton.addEventListener("click", () => {
       stopListening();
@@ -279,6 +317,7 @@
 
     enableDragging(root, dragHandle);
     syncUiState();
+    syncLanguageUi();
     maybeShowForCurrentFocus();
   }
 
@@ -311,6 +350,33 @@
         launcherOffset = saved;
         repositionLauncher();
       }
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  async function restoreSavedLanguageSettings() {
+    if (!chrome?.storage?.local) {
+      return;
+    }
+
+    try {
+      const result = await chrome.storage.local.get([
+        LANGUAGE_MODE_KEY,
+        DOMAIN_LANGUAGE_KEY,
+        LAST_SUCCESSFUL_LANGUAGE_KEY
+      ]);
+      const savedMode = result?.[LANGUAGE_MODE_KEY];
+      const savedDomainMemory = result?.[DOMAIN_LANGUAGE_KEY];
+      const savedLastLanguage = normalizeLanguageTag(result?.[LAST_SUCCESSFUL_LANGUAGE_KEY]);
+
+      if (LANGUAGE_OPTIONS.includes(savedMode)) {
+        languageMode = savedMode;
+      }
+
+      domainLanguageMemory = isPlainObject(savedDomainMemory) ? normalizeDomainLanguageMemory(savedDomainMemory) : {};
+      lastSuccessfulLanguage = savedLastLanguage;
+      syncLanguageUi();
     } catch (_error) {
       // ignore
     }
@@ -370,15 +436,16 @@
 
   async function startListeningCycle(initialInput = null) {
     recognition = new SpeechRecognitionClass();
-    recognition.lang = document.documentElement.lang || navigator.language || "ru-RU";
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    currentRecognitionLanguage = await resolveRecognitionLanguage(initialInput);
+    recognition.lang = currentRecognitionLanguage.tag;
 
     recognition.onstart = () => {
       listening = true;
       syncUiState();
-      updateStatus("Слушаю.");
+      updateStatus(`Слушаю: ${formatActiveLanguageLabel(currentRecognitionLanguage)}`);
     };
 
     recognition.onresult = async (event) => {
@@ -397,14 +464,20 @@
       const inserted = appendTextToInput(liveInput, transcript);
 
       if (inserted) {
-        updateStatus("Текст вставлен.");
+        const appliedLanguage = await persistSuccessfulLanguage(transcript, currentRecognitionLanguage?.tag);
+        const languageLabel = formatLanguageShort(appliedLanguage || currentRecognitionLanguage?.tag);
+        updateStatus(`Текст вставлен. Язык: ${languageLabel}`);
         return;
       }
 
       const copied = await copyTextToClipboard(transcript);
+      const appliedLanguage = copied
+        ? await persistSuccessfulLanguage(transcript, currentRecognitionLanguage?.tag)
+        : currentRecognitionLanguage?.tag;
+      const languageLabel = formatLanguageShort(appliedLanguage || currentRecognitionLanguage?.tag);
       updateStatus(copied
-        ? "Поле не найдено. Текст скопирован в буфер."
-        : "Не удалось вставить текст. Сфокусируй поле и попробуй снова.");
+        ? `Поле не найдено. Текст скопирован в буфер. Язык: ${languageLabel}`
+        : `Не удалось вставить текст. Сфокусируй поле и попробуй снова. Язык: ${languageLabel}`);
     };
 
     recognition.onerror = (event) => {
@@ -419,6 +492,7 @@
     recognition.onend = () => {
       listening = false;
       recognition = null;
+      currentRecognitionLanguage = null;
       syncUiState();
 
       if (!dictationSessionActive) {
@@ -433,6 +507,7 @@
             dictationSessionActive = false;
             listening = false;
             recognition = null;
+            currentRecognitionLanguage = null;
             flashErrorState();
             syncUiState();
             updateStatus(error.message || "Не удалось перезапустить диктовку.");
@@ -447,6 +522,7 @@
       recognition = null;
       listening = false;
       dictationSessionActive = false;
+      currentRecognitionLanguage = null;
       flashErrorState();
       syncUiState();
       updateStatus(error.message || "Не удалось запустить распознавание речи.");
@@ -467,6 +543,19 @@
     visualizerNode.classList.toggle("is-visible", active);
     visualizerNode.classList.toggle("is-listening", active);
     visualizerNode.classList.remove("is-error");
+    syncLanguageUi();
+  }
+
+  function syncLanguageUi() {
+    if (!languageButton) {
+      return;
+    }
+
+    const label = formatLanguageModeLabel(languageMode);
+    languageButton.textContent = label;
+    languageButton.classList.toggle("is-active", languageMode !== DEFAULT_LANGUAGE_MODE);
+    languageButton.setAttribute("aria-label", `Режим языка: ${label}`);
+    languageButton.setAttribute("title", `Режим языка: ${label}`);
   }
 
   function updateStatus(text) {
@@ -483,7 +572,9 @@
 
     statusTimer = setTimeout(() => {
       if (dictationSessionActive) {
-        statusNode.textContent = "Диктовка активна.";
+        statusNode.textContent = currentRecognitionLanguage
+          ? `Слушаю: ${formatActiveLanguageLabel(currentRecognitionLanguage)}`
+          : "Диктовка активна.";
         return;
       }
 
@@ -699,6 +790,194 @@
       default:
         return "Не удалось распознать речь.";
     }
+  }
+
+  async function cycleLanguageMode() {
+    const currentIndex = LANGUAGE_OPTIONS.indexOf(languageMode);
+    const nextMode = LANGUAGE_OPTIONS[(currentIndex + 1) % LANGUAGE_OPTIONS.length] || DEFAULT_LANGUAGE_MODE;
+    languageMode = nextMode;
+    syncLanguageUi();
+    await saveLanguageSettings();
+    updateStatus(`Режим языка: ${formatLanguageModeLabel(languageMode)}`);
+  }
+
+  async function saveLanguageSettings() {
+    if (!chrome?.storage?.local) {
+      return;
+    }
+
+    try {
+      await chrome.storage.local.set({
+        [LANGUAGE_MODE_KEY]: languageMode,
+        [DOMAIN_LANGUAGE_KEY]: domainLanguageMemory,
+        [LAST_SUCCESSFUL_LANGUAGE_KEY]: lastSuccessfulLanguage
+      });
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  async function resolveRecognitionLanguage(activeInput) {
+    if (languageMode === "ru-RU") {
+      return createLanguageSelection("ru-RU", "manual");
+    }
+
+    if (languageMode === "en-US") {
+      return createLanguageSelection("en-US", "manual");
+    }
+
+    const hostname = window.location.hostname || "";
+    const candidates = [
+      hostname ? domainLanguageMemory[hostname] : null,
+      findLanguageFromNode(activeInput),
+      normalizeLanguageTag(document.documentElement.lang),
+      ...(Array.isArray(navigator.languages) ? navigator.languages.map(normalizeLanguageTag) : []),
+      normalizeLanguageTag(navigator.language),
+      lastSuccessfulLanguage,
+      "ru-RU"
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate) {
+        return createLanguageSelection(candidate, "auto");
+      }
+    }
+
+    return createLanguageSelection("ru-RU", "auto");
+  }
+
+  function createLanguageSelection(tag, source) {
+    return {
+      tag,
+      source
+    };
+  }
+
+  function normalizeLanguageTag(value) {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === "ru" || normalized.startsWith("ru-")) {
+      return "ru-RU";
+    }
+    if (normalized === "en" || normalized.startsWith("en-")) {
+      return "en-US";
+    }
+    if (normalized === "uk" || normalized.startsWith("uk-")) {
+      return "uk-UA";
+    }
+    if (normalized === "es" || normalized.startsWith("es-")) {
+      return "es-ES";
+    }
+    if (normalized === "de" || normalized.startsWith("de-")) {
+      return "de-DE";
+    }
+    if (normalized === "fr" || normalized.startsWith("fr-")) {
+      return "fr-FR";
+    }
+
+    return null;
+  }
+
+  function findLanguageFromNode(node) {
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+
+    const languageNode = node.closest("[lang]");
+    if (languageNode instanceof HTMLElement) {
+      return normalizeLanguageTag(languageNode.lang || languageNode.getAttribute("lang"));
+    }
+
+    return null;
+  }
+
+  async function persistSuccessfulLanguage(transcript, fallbackLanguage) {
+    const inferredLanguage = inferTranscriptLanguage(transcript) || normalizeLanguageTag(fallbackLanguage);
+    if (!inferredLanguage) {
+      return normalizeLanguageTag(fallbackLanguage);
+    }
+
+    lastSuccessfulLanguage = inferredLanguage;
+    const hostname = window.location.hostname || "";
+    if (hostname) {
+      domainLanguageMemory[hostname] = inferredLanguage;
+    }
+
+    await saveLanguageSettings();
+    return inferredLanguage;
+  }
+
+  function inferTranscriptLanguage(transcript) {
+    if (/[А-Яа-яЁё]/.test(transcript)) {
+      return "ru-RU";
+    }
+
+    if (/[A-Za-z]/.test(transcript)) {
+      return "en-US";
+    }
+
+    return null;
+  }
+
+  function formatLanguageModeLabel(mode) {
+    switch (mode) {
+      case "ru-RU":
+        return "RU";
+      case "en-US":
+        return "EN";
+      default:
+        return "AUTO";
+    }
+  }
+
+  function formatLanguageShort(tag) {
+    switch (normalizeLanguageTag(tag)) {
+      case "ru-RU":
+        return "RU";
+      case "en-US":
+        return "EN";
+      case "uk-UA":
+        return "UK";
+      case "es-ES":
+        return "ES";
+      case "de-DE":
+        return "DE";
+      case "fr-FR":
+        return "FR";
+      default:
+        return "AUTO";
+    }
+  }
+
+  function formatActiveLanguageLabel(selection) {
+    if (!selection?.tag) {
+      return formatLanguageModeLabel(languageMode);
+    }
+
+    if (languageMode === DEFAULT_LANGUAGE_MODE) {
+      return `AUTO · ${formatLanguageShort(selection.tag)}`;
+    }
+
+    return formatLanguageShort(selection.tag);
+  }
+
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function normalizeDomainLanguageMemory(memory) {
+    const normalizedEntries = Object.entries(memory)
+      .map(([hostname, tag]) => [hostname, normalizeLanguageTag(tag)])
+      .filter(([, tag]) => Boolean(tag));
+
+    return Object.fromEntries(normalizedEntries);
   }
 
   function setNativeInputValue(element, value) {
