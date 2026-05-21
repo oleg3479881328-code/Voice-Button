@@ -33,6 +33,7 @@
   let domainLanguageMemory = {};
   let lastSuccessfulLanguage = null;
   let currentRecognitionLanguage = null;
+  let languageSettingsTouched = false;
 
   if (window.top !== window) {
     return;
@@ -302,11 +303,9 @@
     visualizerNode = root.querySelector(".botton-visualizer");
     dragHandle = root.querySelector(".botton-drag");
 
-    micButton.addEventListener("mousedown", preserveInputFocus, true);
     micButton.addEventListener("pointerdown", preserveInputFocus, true);
     micButton.addEventListener("click", () => toggleListening());
-    languageButton.addEventListener("mousedown", preserveInputFocus, true);
-    languageButton.addEventListener("pointerdown", preserveInputFocus, true);
+    languageButton.addEventListener("pointerdown", rememberInputFocus, true);
     languageButton.addEventListener("click", () => cycleLanguageMode());
 
     closeButton.addEventListener("click", () => {
@@ -370,12 +369,14 @@
       const savedDomainMemory = result?.[DOMAIN_LANGUAGE_KEY];
       const savedLastLanguage = normalizeLanguageTag(result?.[LAST_SUCCESSFUL_LANGUAGE_KEY]);
 
-      if (LANGUAGE_OPTIONS.includes(savedMode)) {
+      if (!languageSettingsTouched && LANGUAGE_OPTIONS.includes(savedMode)) {
         languageMode = savedMode;
       }
 
-      domainLanguageMemory = isPlainObject(savedDomainMemory) ? normalizeDomainLanguageMemory(savedDomainMemory) : {};
-      lastSuccessfulLanguage = savedLastLanguage;
+      if (!languageSettingsTouched) {
+        domainLanguageMemory = isPlainObject(savedDomainMemory) ? normalizeDomainLanguageMemory(savedDomainMemory) : {};
+        lastSuccessfulLanguage = savedLastLanguage;
+      }
       syncLanguageUi();
     } catch (_error) {
       // ignore
@@ -795,10 +796,16 @@
   async function cycleLanguageMode() {
     const currentIndex = LANGUAGE_OPTIONS.indexOf(languageMode);
     const nextMode = LANGUAGE_OPTIONS[(currentIndex + 1) % LANGUAGE_OPTIONS.length] || DEFAULT_LANGUAGE_MODE;
+    languageSettingsTouched = true;
     languageMode = nextMode;
+    currentRecognitionLanguage = createLanguageSelection(
+      nextMode === DEFAULT_LANGUAGE_MODE ? null : nextMode,
+      nextMode === DEFAULT_LANGUAGE_MODE ? "auto" : "manual"
+    );
     syncLanguageUi();
     await saveLanguageSettings();
     updateStatus(`Режим языка: ${formatLanguageModeLabel(languageMode)}`);
+    restoreEditableFocusSoon();
   }
 
   async function saveLanguageSettings() {
@@ -818,11 +825,13 @@
   }
 
   async function resolveRecognitionLanguage(activeInput) {
-    if (languageMode === "ru-RU") {
+    const mode = languageMode;
+
+    if (mode === "ru-RU") {
       return createLanguageSelection("ru-RU", "manual");
     }
 
-    if (languageMode === "en-US") {
+    if (mode === "en-US") {
       return createLanguageSelection("en-US", "manual");
     }
 
@@ -1073,13 +1082,31 @@
   }
 
   function preserveInputFocus(event) {
+    rememberInputFocus();
+    event.preventDefault();
+  }
+
+  function rememberInputFocus() {
     const target = findInputTarget();
     if (target) {
       lastFocusedEditable = target;
       currentAnchor = target;
     }
+  }
 
-    event.preventDefault();
+  function restoreEditableFocusSoon() {
+    const target = findInputTarget() || lastFocusedEditable;
+    if (!target || typeof target.focus !== "function") {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        target.focus();
+      } catch (_error) {
+        // ignore
+      }
+    });
   }
 
   function restoreSelection(target) {
