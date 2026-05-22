@@ -38,6 +38,20 @@
   let lastSuccessfulLanguage = null;
   let currentRecognitionLanguage = null;
   let languageSettingsTouched = false;
+  const PUNCTUATION_COMMANDS = [
+    { pattern: /\b(точка|period|full stop)\b/gi, value: "." },
+    { pattern: /\b(запятая|comma)\b/gi, value: "," },
+    { pattern: /\b(вопросительный знак|question mark)\b/gi, value: "?" },
+    { pattern: /\b(восклицательный знак|exclamation mark|exclamation point)\b/gi, value: "!" },
+    { pattern: /\b(двоеточие|colon)\b/gi, value: ":" },
+    { pattern: /\b(точка с запятой|semicolon)\b/gi, value: ";" },
+    { pattern: /\b(тире|dash)\b/gi, value: " -" },
+    { pattern: /\b(дефис|hyphen)\b/gi, value: "-" },
+    { pattern: /\b(открывающая скобка|open parenthesis)\b/gi, value: "(" },
+    { pattern: /\b(закрывающая скобка|close parenthesis)\b/gi, value: ")" },
+    { pattern: /\b(открывающая кавычка|open quote)\b/gi, value: "\"" },
+    { pattern: /\b(закрывающая кавычка|close quote)\b/gi, value: "\"" }
+  ];
 
   if (window.top !== window) {
     return;
@@ -498,24 +512,25 @@
         .filter(Boolean)
         .join(" ")
         .trim();
+      const normalizedTranscript = applyPunctuationCommands(transcript);
 
-      if (!transcript) {
+      if (!normalizedTranscript) {
         return;
       }
 
       const liveInput = findInputTarget() || initialInput;
-      const inserted = appendTextToInput(liveInput, transcript);
+      const inserted = appendTextToInput(liveInput, normalizedTranscript);
 
       if (inserted) {
-        const appliedLanguage = await persistSuccessfulLanguage(transcript, currentRecognitionLanguage?.tag);
+        const appliedLanguage = await persistSuccessfulLanguage(normalizedTranscript, currentRecognitionLanguage?.tag);
         const languageLabel = formatLanguageShort(appliedLanguage || currentRecognitionLanguage?.tag);
         updateStatus(`Текст вставлен. Язык: ${languageLabel}`);
         return;
       }
 
-      const copied = await copyTextToClipboard(transcript);
+      const copied = await copyTextToClipboard(normalizedTranscript);
       const appliedLanguage = copied
-        ? await persistSuccessfulLanguage(transcript, currentRecognitionLanguage?.tag)
+        ? await persistSuccessfulLanguage(normalizedTranscript, currentRecognitionLanguage?.tag)
         : currentRecognitionLanguage?.tag;
       const languageLabel = formatLanguageShort(appliedLanguage || currentRecognitionLanguage?.tag);
       updateStatus(copied
@@ -1126,6 +1141,27 @@
     }
 
     return null;
+  }
+
+  function applyPunctuationCommands(transcript) {
+    if (!transcript) {
+      return transcript;
+    }
+
+    let normalized = ` ${transcript} `;
+    for (const command of PUNCTUATION_COMMANDS) {
+      normalized = normalized.replace(command.pattern, command.value);
+    }
+
+    normalized = normalized
+      .replace(/\s+([,.;:!?])/g, "$1")
+      .replace(/([(\["])\s+/g, "$1")
+      .replace(/\s+([)\]"])/g, "$1")
+      .replace(/([,.;:!?])(?!\s|$)/g, "$1 ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    return normalized;
   }
 
   function formatLanguageModeLabel(mode) {
