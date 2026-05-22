@@ -2,17 +2,20 @@
   const ROOT_ID = "botton-dictation-root";
   const STORAGE_KEY = "launcherOffset";
   const LANGUAGE_MODE_KEY = "languageMode";
+  const MANUAL_LANGUAGE_KEY = "manualLanguage";
   const DOMAIN_LANGUAGE_KEY = "domainLanguageMemory";
   const LAST_SUCCESSFUL_LANGUAGE_KEY = "lastSuccessfulLanguage";
   const DEFAULT_OFFSET = { x: 14, y: 14 };
   const AUTO_LANGUAGE_MODE = "auto";
-  const DEFAULT_LANGUAGE_MODE = "ru-RU";
-  const LANGUAGE_OPTIONS = ["ru-RU", "en-US", "auto"];
+  const MANUAL_LANGUAGE_OPTIONS = ["ru-RU", "en-US"];
+  const DEFAULT_MANUAL_LANGUAGE = "ru-RU";
+  const DEFAULT_LANGUAGE_MODE = DEFAULT_MANUAL_LANGUAGE;
   const EDITABLE_INPUT_TYPES = new Set(["", "text", "search", "url", "tel", "email", "number"]);
   const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   let root = null;
   let micButton = null;
+  let modeButton = null;
   let languageButton = null;
   let enterButton = null;
   let spaceButton = null;
@@ -35,6 +38,7 @@
   let dismissedForPage = false;
   let launcherOffset = { ...DEFAULT_OFFSET };
   let languageMode = DEFAULT_LANGUAGE_MODE;
+  let manualLanguage = DEFAULT_MANUAL_LANGUAGE;
   let domainLanguageMemory = {};
   let lastSuccessfulLanguage = null;
   let currentRecognitionLanguage = null;
@@ -313,7 +317,8 @@
         }
       </style>
       <div class="botton-card">
-        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
+        <button class="botton-language botton-mode" type="button" aria-label="Режим диктовки" title="Переключить режим">AUTO</button>
+        <button class="botton-language botton-manual-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
         <button class="botton-fab" type="button" aria-label="Запустить диктовку" title="Диктовка">
           <span class="botton-drag"></span>
           <span class="botton-icon"></span>
@@ -336,7 +341,8 @@
     mountTarget.appendChild(root);
 
     micButton = root.querySelector(".botton-fab");
-    languageButton = root.querySelector(".botton-language");
+    modeButton = root.querySelector(".botton-mode");
+    languageButton = root.querySelector(".botton-manual-language");
     enterButton = root.querySelector(".botton-enter");
     spaceButton = root.querySelector(".botton-space");
     backspaceButton = root.querySelector(".botton-backspace");
@@ -347,8 +353,10 @@
 
     micButton.addEventListener("pointerdown", preserveInputFocus, true);
     micButton.addEventListener("click", () => toggleListening());
+    modeButton.addEventListener("pointerdown", rememberInputFocus, true);
+    modeButton.addEventListener("click", () => toggleLanguageMode());
     languageButton.addEventListener("pointerdown", rememberInputFocus, true);
-    languageButton.addEventListener("click", () => cycleLanguageMode());
+    languageButton.addEventListener("click", () => cycleManualLanguage());
     enterButton.addEventListener("pointerdown", preserveInputFocus, true);
     enterButton.addEventListener("click", () => handleEditorAction("enter"));
     spaceButton.addEventListener("pointerdown", preserveInputFocus, true);
@@ -410,15 +418,26 @@
     try {
       const result = await chrome.storage.local.get([
         LANGUAGE_MODE_KEY,
+        MANUAL_LANGUAGE_KEY,
         DOMAIN_LANGUAGE_KEY,
         LAST_SUCCESSFUL_LANGUAGE_KEY
       ]);
       const savedMode = result?.[LANGUAGE_MODE_KEY];
+      const savedManualLanguage = normalizeLanguageTag(result?.[MANUAL_LANGUAGE_KEY]);
       const savedDomainMemory = result?.[DOMAIN_LANGUAGE_KEY];
       const savedLastLanguage = normalizeLanguageTag(result?.[LAST_SUCCESSFUL_LANGUAGE_KEY]);
 
-      if (!languageSettingsTouched && LANGUAGE_OPTIONS.includes(savedMode)) {
-        languageMode = savedMode;
+      if (!languageSettingsTouched) {
+        if (MANUAL_LANGUAGE_OPTIONS.includes(savedManualLanguage)) {
+          manualLanguage = savedManualLanguage;
+        }
+
+        if (savedMode === AUTO_LANGUAGE_MODE) {
+          languageMode = AUTO_LANGUAGE_MODE;
+        } else if (MANUAL_LANGUAGE_OPTIONS.includes(savedMode)) {
+          manualLanguage = savedMode;
+          languageMode = savedMode;
+        }
       }
 
       if (!languageSettingsTouched) {
@@ -606,15 +625,25 @@
   }
 
   function syncLanguageUi() {
-    if (!languageButton) {
+    if (!languageButton || !modeButton) {
       return;
     }
 
-    const label = formatLanguageModeLabel(languageMode);
-    languageButton.textContent = label;
-    languageButton.classList.toggle("is-active", languageMode !== DEFAULT_LANGUAGE_MODE);
-    languageButton.setAttribute("aria-label", `Режим языка: ${label}`);
-    languageButton.setAttribute("title", `Режим языка: ${label}`);
+    const modeLabel = languageMode === AUTO_LANGUAGE_MODE ? "AUTO" : "MAN";
+    const languageLabel = formatLanguageShort(manualLanguage);
+
+    modeButton.textContent = modeLabel;
+    modeButton.classList.toggle("is-active", languageMode !== AUTO_LANGUAGE_MODE);
+    modeButton.setAttribute("aria-label", `Режим диктовки: ${modeLabel}`);
+    modeButton.setAttribute("title", `Режим диктовки: ${modeLabel}`);
+
+    languageButton.textContent = languageLabel;
+    languageButton.classList.toggle("is-active", languageMode !== AUTO_LANGUAGE_MODE);
+    languageButton.disabled = languageMode === AUTO_LANGUAGE_MODE;
+    languageButton.setAttribute("aria-label", `Язык ручного режима: ${languageLabel}`);
+    languageButton.setAttribute("title", languageMode === AUTO_LANGUAGE_MODE
+      ? `Язык ручного режима: ${languageLabel}. Сначала включи MAN.`
+      : `Язык ручного режима: ${languageLabel}`);
   }
 
   function updateStatus(text) {
@@ -1002,18 +1031,35 @@
     stream.getTracks().forEach((track) => track.stop());
   }
 
-  async function cycleLanguageMode() {
-    const currentIndex = LANGUAGE_OPTIONS.indexOf(languageMode);
-    const nextMode = LANGUAGE_OPTIONS[(currentIndex + 1) % LANGUAGE_OPTIONS.length] || DEFAULT_LANGUAGE_MODE;
+  async function toggleLanguageMode() {
     languageSettingsTouched = true;
-    languageMode = nextMode;
+    languageMode = languageMode === AUTO_LANGUAGE_MODE ? manualLanguage : AUTO_LANGUAGE_MODE;
     currentRecognitionLanguage = createLanguageSelection(
-      nextMode === AUTO_LANGUAGE_MODE ? null : nextMode,
-      nextMode === AUTO_LANGUAGE_MODE ? "auto" : "manual"
+      languageMode === AUTO_LANGUAGE_MODE ? null : languageMode,
+      languageMode === AUTO_LANGUAGE_MODE ? "auto" : "manual"
     );
     syncLanguageUi();
     await saveLanguageSettings();
-    updateStatus(`Режим языка: ${formatLanguageModeLabel(languageMode)}`);
+    updateStatus(`Режим: ${languageMode === AUTO_LANGUAGE_MODE ? "AUTO" : `MAN · ${formatLanguageShort(manualLanguage)}`}`);
+    restoreEditableFocusSoon();
+  }
+
+  async function cycleManualLanguage() {
+    if (languageMode === AUTO_LANGUAGE_MODE) {
+      updateStatus("Сначала включи MAN.");
+      restoreEditableFocusSoon();
+      return;
+    }
+
+    const currentIndex = MANUAL_LANGUAGE_OPTIONS.indexOf(manualLanguage);
+    const nextLanguage = MANUAL_LANGUAGE_OPTIONS[(currentIndex + 1) % MANUAL_LANGUAGE_OPTIONS.length] || DEFAULT_MANUAL_LANGUAGE;
+    languageSettingsTouched = true;
+    manualLanguage = nextLanguage;
+    languageMode = nextLanguage;
+    currentRecognitionLanguage = createLanguageSelection(nextLanguage, "manual");
+    syncLanguageUi();
+    await saveLanguageSettings();
+    updateStatus(`Язык ручного режима: ${formatLanguageShort(manualLanguage)}`);
     restoreEditableFocusSoon();
   }
 
@@ -1025,6 +1071,7 @@
     try {
       await chrome.storage.local.set({
         [LANGUAGE_MODE_KEY]: languageMode,
+        [MANUAL_LANGUAGE_KEY]: manualLanguage,
         [DOMAIN_LANGUAGE_KEY]: domainLanguageMemory,
         [LAST_SUCCESSFUL_LANGUAGE_KEY]: lastSuccessfulLanguage
       });
@@ -1036,12 +1083,8 @@
   async function resolveRecognitionLanguage(activeInput) {
     const mode = languageMode;
 
-    if (mode === "ru-RU") {
-      return createLanguageSelection("ru-RU", "manual");
-    }
-
-    if (mode === "en-US") {
-      return createLanguageSelection("en-US", "manual");
+    if (MANUAL_LANGUAGE_OPTIONS.includes(mode)) {
+      return createLanguageSelection(mode, "manual");
     }
 
     const hostname = window.location.hostname || "";
@@ -1197,7 +1240,7 @@
 
   function formatActiveLanguageLabel(selection) {
     if (!selection?.tag) {
-      return formatLanguageModeLabel(languageMode);
+      return languageMode === AUTO_LANGUAGE_MODE ? "AUTO" : formatLanguageShort(manualLanguage);
     }
 
     if (languageMode === AUTO_LANGUAGE_MODE) {
