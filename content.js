@@ -13,6 +13,9 @@
   let root = null;
   let micButton = null;
   let languageButton = null;
+  let enterButton = null;
+  let spaceButton = null;
+  let backspaceButton = null;
   let closeButton = null;
   let statusNode = null;
   let dragHandle = null;
@@ -208,6 +211,23 @@
           background: rgba(232, 243, 238, 0.98);
           color: #125445;
         }
+        #${ROOT_ID} .botton-action {
+          min-width: 36px;
+          height: 28px;
+          border: 0;
+          border-radius: 999px;
+          padding: 0 9px;
+          background: rgba(248, 250, 247, 0.98);
+          color: #29453b;
+          box-shadow: 0 10px 24px rgba(12, 23, 18, 0.12);
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+        #${ROOT_ID} .botton-action:hover {
+          transform: translateY(-1px);
+        }
         #${ROOT_ID} .botton-visualizer {
           display: flex;
           align-items: center;
@@ -282,6 +302,9 @@
           <span class="botton-icon"></span>
         </button>
         <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
+        <button class="botton-action botton-enter" type="button" aria-label="Enter" title="Enter">↵</button>
+        <button class="botton-action botton-space" type="button" aria-label="Space" title="Space">␠</button>
+        <button class="botton-action botton-backspace" type="button" aria-label="Backspace" title="Backspace">⌫</button>
         <button class="botton-close" type="button" aria-label="Скрыть launcher" title="Скрыть">×</button>
         <div class="botton-visualizer" aria-hidden="true">
           <span class="botton-bar"></span>
@@ -298,6 +321,9 @@
 
     micButton = root.querySelector(".botton-fab");
     languageButton = root.querySelector(".botton-language");
+    enterButton = root.querySelector(".botton-enter");
+    spaceButton = root.querySelector(".botton-space");
+    backspaceButton = root.querySelector(".botton-backspace");
     closeButton = root.querySelector(".botton-close");
     statusNode = root.querySelector(".botton-status");
     visualizerNode = root.querySelector(".botton-visualizer");
@@ -307,6 +333,12 @@
     micButton.addEventListener("click", () => toggleListening());
     languageButton.addEventListener("pointerdown", rememberInputFocus, true);
     languageButton.addEventListener("click", () => cycleLanguageMode());
+    enterButton.addEventListener("pointerdown", preserveInputFocus, true);
+    enterButton.addEventListener("click", () => handleEditorAction("enter"));
+    spaceButton.addEventListener("pointerdown", preserveInputFocus, true);
+    spaceButton.addEventListener("click", () => handleEditorAction("space"));
+    backspaceButton.addEventListener("pointerdown", preserveInputFocus, true);
+    backspaceButton.addEventListener("click", () => handleEditorAction("backspace"));
 
     closeButton.addEventListener("click", () => {
       stopListening();
@@ -737,6 +769,95 @@
     return true;
   }
 
+  function handleEditorAction(action) {
+    const target = findInputTarget();
+    if (!target) {
+      updateStatus("Активное поле не найдено.");
+      return;
+    }
+
+    const applied = applyEditorAction(target, action);
+    if (!applied) {
+      updateStatus(getActionFailureStatus(action));
+      return;
+    }
+
+    updateStatus(getActionSuccessStatus(action));
+  }
+
+  function applyEditorAction(target, action) {
+    target = getEditableTarget(target);
+    if (!target) {
+      return false;
+    }
+
+    if (target instanceof HTMLTextAreaElement) {
+      target.focus();
+      const selection = getTextControlSelection(target);
+      if (action === "enter") {
+        replaceTextControlRange(target, "\n", selection, "insertLineBreak");
+        return true;
+      }
+      if (action === "space") {
+        replaceTextControlRange(target, " ", selection, "insertText");
+        return true;
+      }
+
+      return deleteTextControlBackward(target, selection);
+    }
+
+    if (target instanceof HTMLInputElement) {
+      target.focus();
+      const selection = getTextControlSelection(target);
+      if (action === "enter") {
+        return dispatchSyntheticEnter(target);
+      }
+      if (action === "space") {
+        replaceTextControlRange(target, " ", selection, "insertText");
+        return true;
+      }
+
+      return deleteTextControlBackward(target, selection);
+    }
+
+    target.focus();
+    if (!restoreSelection(target)) {
+      placeCaretAtEnd(target);
+    }
+
+    if (action === "enter") {
+      return dispatchContentEditableEnter(target);
+    }
+
+    if (action === "space") {
+      return insertContentEditableText(target, " ", "insertText");
+    }
+
+    return deleteContentEditableBackward(target);
+  }
+
+  function getActionSuccessStatus(action) {
+    switch (action) {
+      case "enter":
+        return "Enter выполнен.";
+      case "space":
+        return "Пробел вставлен.";
+      default:
+        return "Backspace выполнен.";
+    }
+  }
+
+  function getActionFailureStatus(action) {
+    switch (action) {
+      case "enter":
+        return "Не удалось выполнить Enter.";
+      case "space":
+        return "Не удалось вставить пробел.";
+      default:
+        return "Не удалось выполнить Backspace.";
+    }
+  }
+
   function readInputValue(target) {
     if (!target) {
       return "";
@@ -1033,6 +1154,289 @@
       : HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
     descriptor?.set?.call(element, value);
+  }
+
+  function replaceTextControlRange(target, text, selection, inputType) {
+    if (typeof target.setRangeText === "function" && selection.hasSelectionApi) {
+      target.setRangeText(text, selection.start, selection.end, "end");
+    } else {
+      const nextValue = `${target.value.slice(0, selection.start)}${text}${target.value.slice(selection.end)}`;
+      setNativeInputValue(target, nextValue);
+      if (typeof target.setSelectionRange === "function" && selection.hasSelectionApi) {
+        const caret = selection.start + text.length;
+        target.setSelectionRange(caret, caret);
+      }
+    }
+
+    dispatchTextInputEvents(target, text, inputType);
+  }
+
+  function deleteTextControlBackward(target, selection) {
+    if (selection.start !== selection.end) {
+      replaceTextControlRange(target, "", selection, "deleteContentBackward");
+      return true;
+    }
+
+    if (selection.start <= 0) {
+      return false;
+    }
+
+    replaceTextControlRange(target, "", {
+      start: selection.start - 1,
+      end: selection.end,
+      hasSelectionApi: selection.hasSelectionApi
+    }, "deleteContentBackward");
+    return true;
+  }
+
+  function dispatchTextInputEvents(target, data, inputType) {
+    try {
+      target.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        data,
+        inputType
+      }));
+    } catch (_error) {
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function dispatchSyntheticEnter(target) {
+    return dispatchSyntheticKey(target, "Enter", "Enter", true);
+  }
+
+  function dispatchSyntheticKey(target, key, code, submitForm = false) {
+    const keyEventInit = {
+      bubbles: true,
+      cancelable: true,
+      key,
+      code
+    };
+
+    target.dispatchEvent(new KeyboardEvent("keydown", keyEventInit));
+    target.dispatchEvent(new KeyboardEvent("keypress", keyEventInit));
+    target.dispatchEvent(new KeyboardEvent("keyup", keyEventInit));
+
+    if (submitForm) {
+      const form = target.form || target.closest("form");
+      if (form && typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      }
+    }
+
+    return true;
+  }
+
+  function dispatchContentEditableEnter(target) {
+    const before = readInputValue(target);
+    const selectionBefore = serializeSelection();
+    dispatchSyntheticKey(target, "Enter", "Enter");
+    const after = readInputValue(target);
+    const selectionAfter = serializeSelection();
+    if (before !== after || selectionBefore !== selectionAfter) {
+      return true;
+    }
+
+    return insertContentEditableLineBreak(target);
+  }
+
+  function insertContentEditableText(target, text, inputType) {
+    if (typeof document.execCommand === "function") {
+      try {
+        if (document.execCommand("insertText", false, text)) {
+          target.dispatchEvent(new InputEvent("input", {
+            bubbles: true,
+            data: text,
+            inputType
+          }));
+          target.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+      } catch (_error) {
+        // ignore and fall through to range-based insertion
+      }
+    }
+
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedSelectionRange = range.cloneRange();
+    target.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      data: text,
+      inputType
+    }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function insertContentEditableLineBreak(target) {
+    if (typeof document.execCommand === "function") {
+      try {
+        if (document.execCommand("insertLineBreak")) {
+          target.dispatchEvent(new InputEvent("input", {
+            bubbles: true,
+            data: "\n",
+            inputType: "insertLineBreak"
+          }));
+          target.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+      } catch (_error) {
+        // ignore and fall through to range-based insertion
+      }
+    }
+
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const lineBreak = document.createElement("br");
+    range.insertNode(lineBreak);
+    range.setStartAfter(lineBreak);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedSelectionRange = range.cloneRange();
+    target.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      data: "\n",
+      inputType: "insertLineBreak"
+    }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function deleteContentEditableBackward(target) {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) {
+      range.deleteContents();
+    } else {
+      const deleteRange = createBackwardDeleteRange(range);
+      if (!deleteRange) {
+        return false;
+      }
+      deleteRange.deleteContents();
+      range.setStart(deleteRange.startContainer, deleteRange.startOffset);
+      range.collapse(true);
+    }
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedSelectionRange = range.cloneRange();
+    target.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      data: "",
+      inputType: "deleteContentBackward"
+    }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function createBackwardDeleteRange(range) {
+    const { startContainer, startOffset } = range;
+
+    if (startContainer.nodeType === Node.TEXT_NODE && startOffset > 0) {
+      const deleteRange = range.cloneRange();
+      deleteRange.setStart(startContainer, startOffset - 1);
+      deleteRange.setEnd(startContainer, startOffset);
+      return deleteRange;
+    }
+
+    let previousNode = null;
+    if (startContainer.nodeType === Node.TEXT_NODE) {
+      previousNode = findPreviousEditableNode(startContainer);
+    } else if (startContainer.childNodes[startOffset - 1]) {
+      previousNode = deepestRightNode(startContainer.childNodes[startOffset - 1]);
+    } else {
+      previousNode = findPreviousEditableNode(startContainer);
+    }
+
+    if (!previousNode) {
+      return null;
+    }
+
+    const deleteRange = range.cloneRange();
+    if (previousNode.nodeType === Node.TEXT_NODE) {
+      const length = previousNode.textContent?.length || 0;
+      if (!length) {
+        return null;
+      }
+      deleteRange.setStart(previousNode, length - 1);
+      deleteRange.setEnd(previousNode, length);
+      return deleteRange;
+    }
+
+    const parent = previousNode.parentNode;
+    if (!parent) {
+      return null;
+    }
+
+    const nodeIndex = Array.prototype.indexOf.call(parent.childNodes, previousNode);
+    if (nodeIndex < 0) {
+      return null;
+    }
+    deleteRange.setStart(parent, nodeIndex);
+    deleteRange.setEnd(parent, nodeIndex + 1);
+    return deleteRange;
+  }
+
+  function deepestRightNode(node) {
+    let current = node;
+    while (current?.lastChild) {
+      current = current.lastChild;
+    }
+    return current;
+  }
+
+  function findPreviousEditableNode(node) {
+    let current = node;
+    while (current) {
+      if (current.previousSibling) {
+        return deepestRightNode(current.previousSibling);
+      }
+      current = current.parentNode;
+    }
+    return null;
+  }
+
+  function serializeSelection() {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      return "";
+    }
+
+    const range = selection.getRangeAt(0);
+    const startContainer = range.startContainer;
+    const endContainer = range.endContainer;
+    return [
+      startContainer?.nodeType,
+      startContainer?.textContent?.length || 0,
+      range.startOffset,
+      endContainer?.nodeType,
+      endContainer?.textContent?.length || 0,
+      range.endOffset,
+      range.collapsed
+    ].join(":");
   }
 
   function getDeepActiveElement() {
