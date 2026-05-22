@@ -24,6 +24,7 @@
   let listening = false;
   let dictationSessionActive = false;
   let dictationRestartTimer = null;
+  let autoStartTimer = null;
   let statusTimer = null;
   let hideTimer = null;
   let attachObserver = null;
@@ -419,6 +420,7 @@
     const target = findInputTarget();
     if (target) {
       showLauncherForTarget(target);
+      scheduleAutoStart(target);
     }
   }
 
@@ -630,6 +632,7 @@
         lastFocusedEditable = target;
         dismissedForPage = false;
         showLauncherForTarget(target);
+        scheduleAutoStart(target);
       }
     }, true);
 
@@ -664,6 +667,33 @@
     root.classList.add("is-visible");
   }
 
+  function scheduleAutoStart(target) {
+    if (!target || dismissedForPage || dictationSessionActive || listening || !SpeechRecognitionClass) {
+      return;
+    }
+
+    if (autoStartTimer) {
+      clearTimeout(autoStartTimer);
+    }
+
+    autoStartTimer = setTimeout(() => {
+      autoStartTimer = null;
+
+      if (dismissedForPage || dictationSessionActive || listening) {
+        return;
+      }
+
+      const liveTarget = findInputTarget();
+      if (!liveTarget || liveTarget !== target) {
+        return;
+      }
+
+      toggleListening().catch((_error) => {
+        // toggleListening already updates user-visible status on failure
+      });
+    }, 140);
+  }
+
   function scheduleHideCheck() {
     if (hideTimer) {
       clearTimeout(hideTimer);
@@ -685,6 +715,10 @@
   }
 
   function hideLauncherImmediately() {
+    if (autoStartTimer) {
+      clearTimeout(autoStartTimer);
+      autoStartTimer = null;
+    }
     root?.classList.remove("is-visible");
     currentAnchor = null;
     if (statusNode) {
