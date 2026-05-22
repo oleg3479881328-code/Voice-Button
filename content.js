@@ -5,6 +5,7 @@
   const DOMAIN_LANGUAGE_KEY = "domainLanguageMemory";
   const LAST_SUCCESSFUL_LANGUAGE_KEY = "lastSuccessfulLanguage";
   const DEFAULT_OFFSET = { x: 14, y: 14 };
+  const AUTO_LANGUAGE_MODE = "auto";
   const DEFAULT_LANGUAGE_MODE = "ru-RU";
   const LANGUAGE_OPTIONS = ["ru-RU", "en-US", "auto"];
   const EDITABLE_INPUT_TYPES = new Set(["", "text", "search", "url", "tel", "email", "number"]);
@@ -1007,8 +1008,8 @@
     languageSettingsTouched = true;
     languageMode = nextMode;
     currentRecognitionLanguage = createLanguageSelection(
-      nextMode === DEFAULT_LANGUAGE_MODE ? null : nextMode,
-      nextMode === DEFAULT_LANGUAGE_MODE ? "auto" : "manual"
+      nextMode === AUTO_LANGUAGE_MODE ? null : nextMode,
+      nextMode === AUTO_LANGUAGE_MODE ? "auto" : "manual"
     );
     syncLanguageUi();
     await saveLanguageSettings();
@@ -1199,7 +1200,7 @@
       return formatLanguageModeLabel(languageMode);
     }
 
-    if (languageMode === DEFAULT_LANGUAGE_MODE) {
+    if (languageMode === AUTO_LANGUAGE_MODE) {
       return `AUTO · ${formatLanguageShort(selection.tag)}`;
     }
 
