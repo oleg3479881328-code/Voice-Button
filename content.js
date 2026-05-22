@@ -1092,23 +1092,30 @@
     }
 
     const hostname = window.location.hostname || "";
-    const candidates = [
-      hostname ? domainLanguageMemory[hostname] : null,
+    const stickyCandidates = [
+      lastSuccessfulLanguage,
+      hostname ? domainLanguageMemory[hostname] : null
+    ].filter(Boolean);
+    const contextualCandidates = [
       findLanguageFromNode(activeInput),
       normalizeLanguageTag(document.documentElement.lang),
       ...(Array.isArray(navigator.languages) ? navigator.languages.map(normalizeLanguageTag) : []),
-      normalizeLanguageTag(navigator.language),
-      lastSuccessfulLanguage,
-      "ru-RU"
-    ];
+      normalizeLanguageTag(navigator.language)
+    ].filter(Boolean);
 
-    for (const candidate of candidates) {
+    for (const candidate of [...stickyCandidates, ...contextualCandidates]) {
+      if (candidate === "ru-RU") {
+        return createLanguageSelection(candidate, "auto");
+      }
+    }
+
+    for (const candidate of contextualCandidates) {
       if (candidate) {
         return createLanguageSelection(candidate, "auto");
       }
     }
 
-    return createLanguageSelection("ru-RU", "auto");
+    return createLanguageSelection(manualLanguage || "ru-RU", "auto");
   }
 
   function createLanguageSelection(tag, source) {
@@ -1172,7 +1179,11 @@
     lastSuccessfulLanguage = inferredLanguage;
     const hostname = window.location.hostname || "";
     if (hostname) {
-      domainLanguageMemory[hostname] = inferredLanguage;
+      if (inferredLanguage === "ru-RU") {
+        domainLanguageMemory[hostname] = inferredLanguage;
+      } else {
+        delete domainLanguageMemory[hostname];
+      }
     }
 
     await saveLanguageSettings();
