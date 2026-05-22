@@ -1,7 +1,7 @@
 ---
 status: in-progress
 project_mode: full
-current_step: 07_RESULT
+current_step: 09_LOG
 current_run: workflow-runs/0001-legacy-normalization-and-publication-readiness/
 last_updated: 2026-05-22
 next_action: Run manual Chrome testing of the current extension and record results.
@@ -64,7 +64,7 @@ No project-specific agents are required now.
 
 ## Latest Result
 
-Project documentation, tester help and publication-preparation drafts exist in `main`. Human browser testing remains the blocking gate.
+The first documented workflow run is complete through its log stage. Project documentation, tester help and publication-preparation drafts exist in `main`. Human browser testing remains the blocking gate.
 
 ## Next Action
 
