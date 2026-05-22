@@ -34,6 +34,16 @@ The product runtime is concentrated in `content.js`, which holds UI, recognition
 
 A future store release should be tied to a documented release package and a clear version record. A Git tag and release note are reasonable release-process improvements once the release candidate is validated.
 
+## Important Problem Missed By The Review
+
+### Current default language mode conflicts with the intended product behavior
+
+Current code defines `DEFAULT_LANGUAGE_MODE = DEFAULT_MANUAL_LANGUAGE`, and the default manual language is `ru-RU`. This means the extension starts in manual Russian mode instead of automatic mode.
+
+The intended product direction stated by the owner is the opposite: automatic language selection should be the normal default, while manual `RU` and `EN` should exist as fallback controls when automatic selection fails.
+
+This mismatch should be resolved before final user acceptance of language behavior.
+
 ## Incorrect Or Overstated Claims
 
 ### The extension is not proven to be fully local
@@ -68,12 +78,13 @@ Automated testing is useful, especially for pure functions such as language reso
 
 ## Priority Order Accepted For This Project
 
-1. Run manual Chrome testing for current `RU`, `EN`, `AUTO` and launcher behavior.
-2. Correct privacy-facing documentation so it does not claim local-only recognition.
-3. Create real extension icon assets and add them to the manifest.
-4. Provide a public privacy-policy URL and support contact.
-5. Build and verify a clean tester ZIP and later a store release ZIP.
-6. Only after MVP stability, decide whether to refactor `content.js` and add automated tests.
+1. Resolve the product mismatch: decide whether `AUTO` must again be the default mode.
+2. Run manual Chrome testing for current `RU`, `EN`, `AUTO` and launcher behavior.
+3. Keep privacy-facing documentation free of any local-only recognition claim.
+4. Create real extension icon assets and add them to the manifest.
+5. Provide a public privacy-policy URL and support contact.
+6. Build and verify a clean tester ZIP and later a store release ZIP.
+7. Only after MVP stability, decide whether to refactor `content.js` and add automated tests.
 
 ## References
 
