@@ -749,16 +749,15 @@
     }
 
     hideTimer = setTimeout(() => {
-      if (dictationSessionActive || listening) {
-        return;
-      }
-
-      const active = document.activeElement;
+      const active = getDeepActiveElement();
       if (isEditableTarget(active)) {
         showLauncherForTarget(active);
         return;
       }
 
+      if (dictationSessionActive || listening) {
+        stopListening();
+      }
       hideLauncherImmediately();
     }, 140);
   }
