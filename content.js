@@ -297,14 +297,14 @@
         }
       </style>
       <div class="botton-card">
+        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
         <button class="botton-fab" type="button" aria-label="Запустить диктовку" title="Диктовка">
           <span class="botton-drag"></span>
           <span class="botton-icon"></span>
         </button>
-        <button class="botton-language" type="button" aria-label="Режим языка" title="Переключить язык">RU</button>
-        <button class="botton-action botton-enter" type="button" aria-label="Enter" title="Enter">↵</button>
-        <button class="botton-action botton-space" type="button" aria-label="Space" title="Space">␠</button>
         <button class="botton-action botton-backspace" type="button" aria-label="Backspace" title="Backspace">⌫</button>
+        <button class="botton-action botton-space" type="button" aria-label="Space" title="Space">␠</button>
+        <button class="botton-action botton-enter" type="button" aria-label="Enter" title="Enter">↵</button>
         <button class="botton-close" type="button" aria-label="Скрыть launcher" title="Скрыть">×</button>
         <div class="botton-visualizer" aria-hidden="true">
           <span class="botton-bar"></span>
