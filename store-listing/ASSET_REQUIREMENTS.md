@@ -1,0 +1,47 @@
+# Voice Button — Asset Requirements
+
+## Status
+
+`in preparation`
+
+## Extension Icon
+
+A final extension icon set must be added and checked before submission.
+
+Required checks:
+
+- icon files exist in the repository;
+- `manifest.json` points to the actual icon files;
+- icon remains clear at small size;
+- icon represents Voice Button honestly.
+
+Current status: no final icon assets are confirmed in project evidence.
+
+## Screenshots
+
+Prepare real screenshots of the working extension. Preferred target size: `1280 x 800`.
+
+Planned screenshots:
+
+1. Voice Button shown beside a focused text field.
+2. Voice Button listening while the user dictates.
+3. Recognized text placed in the field, with language controls visible.
+
+Rules:
+
+- show the real current UI only;
+- do not add features in a mockup that are not in the product;
+- do not show private user information in screenshots.
+
+## Promotional Image
+
+Check the current Chrome Web Store dashboard requirements before final upload and prepare any promotional image requested there.
+
+Candidate size to verify during submission preparation: `440 x 280`.
+
+## Missing Inputs
+
+- approved icon direction;
+- final icon files;
+- real product screenshots;
+- any promotional image required by the final dashboard flow.
