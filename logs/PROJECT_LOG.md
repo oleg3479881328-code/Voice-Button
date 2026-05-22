@@ -4,35 +4,61 @@
 
 ### Action
 
-The existing `Voice-Button` repository is being normalized as a dedicated project repository under Project Execution OS.
+The existing `Voice-Button` repository was normalized as a dedicated project repository under Project Execution OS.
 
-### Files Added
+### Project Memory Added
 
 - `PROJECT_ENTRYPOINT.md`
 - `PROJECT_STATE.md`
 - `PROJECT_RULES.md`
+- `CONTEXT_PACK.md`
 - `logs/PROJECT_LOG.md`
+- `agents/README.md`
+- `project-library/README.md`
+- `project-library/patterns/tester-delivery-and-store-readiness.md`
 
-### Purpose
+### Workflow Run Added
 
-Preserve project goal, current state, project rules, evidence boundaries and next action in durable repository artifacts instead of chat-only context.
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/00_INPUT.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/01_CLARIFICATION.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/02_RESEARCH.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/03_PLAN.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/04_AGENT_DESIGN.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/05_EXECUTION_SPEC.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/06_REVIEW.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/07_RESULT.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/08_KNOWLEDGE_EXTRACT.md`
+- `workflow-runs/0001-legacy-normalization-and-publication-readiness/09_LOG.md`
 
-### Existing Product Evidence
+### Tester And Publication Files Added
 
-- Language-mode implementation and follow-up fixes exist in `main` through commits `4e36c77`, `03c51de`, `7be3df5` and `f810588`.
-- GitHub issue #1 records the language-mode work and user-reported regression.
-- GitHub issue #2 records publication preparation and tester ZIP work.
+- `docs/MANUAL_TEST_CHECKLIST.md`
+- `docs/CHROME_WEB_STORE_READINESS.md`
+- `docs/TESTER_ZIP_PACKAGING.md`
+- `store-listing/STORE_LISTING_DRAFT.md`
+- `store-listing/PRIVACY_PRACTICES_DRAFT.md`
+- `store-listing/ASSET_REQUIREMENTS.md`
+- `store-listing/TEST_INSTRUCTIONS.md`
+- `help/INSTALL_AND_TEST_GUIDE.html`
 
-### Current State
+### Product Evidence Already Present
 
-`committed documentation initialization in progress`
+- `4e36c77`: language mode feature.
+- `03c51de`: language state and focus fix.
+- `7be3df5`: manual RU mode fix.
+- `f810588`: launcher hide behavior fix.
 
-### Risks / Open Work
+### Resulting State
 
-- Human Chrome testing is still required for language and launcher behavior.
-- Tester ZIP is not yet verified as delivered.
-- Chrome Web Store documentation and assets are not complete.
+`committed` — project documentation, workflow history, tester help and publication-preparation drafts exist in `main`.
+
+### Still Open
+
+- Human Chrome testing for current language and launcher behavior.
+- Creation and verification of the clean tester ZIP.
+- Final icons, screenshots, public privacy-policy URL and support contact.
+- Review of the extracted central publication-readiness skill before any active status.
 
 ### Next Action
 
-Create the first workflow-run artifacts for normalization and publication readiness, then prepare tester and store-facing documentation.
+Run manual Chrome checks against the latest extension and record results in `PROJECT_STATE.md` and this log.
