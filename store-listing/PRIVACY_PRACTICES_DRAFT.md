@@ -24,11 +24,15 @@ The extension loads its content script on normal HTTP and HTTPS web pages. This 
 
 ## Microphone Behavior Confirmed By Code
 
-The current code requests microphone access through the browser when the user activates voice input.
+The current code requests microphone access through the browser when the user activates voice input by calling `navigator.mediaDevices.getUserMedia({ audio: true })` before starting browser speech recognition.
 
-## Speech Recognition Statement
+## Speech Recognition And Audio Processing
 
-The current code uses the browser speech recognition interface. A final public privacy statement must not describe network handling of speech or transcripts until that statement has been checked against current browser behavior and publication requirements.
+The current code uses the browser `SpeechRecognition` / `webkitSpeechRecognition` interface.
+
+The project must not claim that speech recognition is fully local or offline. MDN documents that in some browsers, including Chrome, speech recognition on a web page involves a server-based recognition engine and audio is sent to a web service for recognition processing.
+
+The final public privacy policy and Chrome Web Store data-use disclosure must accurately describe this browser-mediated speech processing and must be reviewed against the final packaged release.
 
 ## Stored Settings Confirmed By Code
 
@@ -41,7 +45,9 @@ The code stores local settings for:
 
 ## Remote Code
 
-No remote code declaration is finalized in this draft. It must be confirmed by a complete release-file audit before submission.
+No remotely hosted executable code has been identified in the current project evidence. Final Chrome Web Store remote-code answers must still be checked against the exact packaged ZIP before submission.
+
+Browser speech-recognition processing is a data-use/privacy disclosure concern and must not be confused with executing remote extension code.
 
 ## Required Before Submission
 
@@ -50,6 +56,11 @@ No remote code declaration is finalized in this draft. It must be confirmed by a
 - Final review of code and packaged ZIP.
 - Final dashboard answers matching shipped behavior.
 
+## References
+
+- https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
+- https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition
+
 ## Rule
 
-Do not claim that user data is or is not transmitted beyond what the audited release and official platform behavior support.
+Do not claim local-only recognition or zero external processing unless a future audited implementation and supporting browser behavior prove that claim.
