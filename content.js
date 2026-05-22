@@ -717,6 +717,10 @@
       return;
     }
 
+    if (languageMode !== AUTO_LANGUAGE_MODE) {
+      return;
+    }
+
     if (autoStartTimer) {
       clearTimeout(autoStartTimer);
     }
