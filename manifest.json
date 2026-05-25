@@ -3,11 +3,23 @@
   "name": "Voice Button",
   "version": "0.2.0",
   "description": "Floating voice dictation button for text input on regular web pages.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": [
     "storage"
   ],
   "action": {
-    "default_title": "Voice Button"
+    "default_title": "Voice Button",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "content_scripts": [
     {
