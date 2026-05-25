@@ -6,16 +6,21 @@
 
 ## Extension Icon
 
-A final extension icon set must be added and checked before submission.
+A working extension icon set is committed in the repository and connected in `manifest.json`.
 
-Required checks:
+Committed icon files:
 
-- icon files exist in the repository;
-- `manifest.json` points to the actual icon files;
-- icon remains clear at small size;
-- icon represents Voice Button honestly.
+- `icons/icon-16.png`
+- `icons/icon-32.png`
+- `icons/icon-48.png`
+- `icons/icon-128.png`
 
-Current status: no final icon assets are confirmed in project evidence.
+Manifest connections confirmed:
+
+- `icons` declares all four sizes;
+- `action.default_icon` declares all four sizes.
+
+Current status: icon assets are present and technically connected. Final visual approval remains open until the owner checks how the icon looks in Chrome and in store materials.
 
 ## Screenshots
 
@@ -39,9 +44,8 @@ Check the current Chrome Web Store dashboard requirements before final upload an
 
 Candidate size to verify during submission preparation: `440 x 280`.
 
-## Missing Inputs
+## Remaining Inputs
 
-- approved icon direction;
-- final icon files;
+- owner visual acceptance of the committed icon;
 - real product screenshots;
 - any promotional image required by the final dashboard flow.
