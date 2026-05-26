@@ -62,3 +62,39 @@ The existing `Voice-Button` repository was normalized as a dedicated project rep
 ### Next Action
 
 Run manual Chrome checks against the latest extension and record results in `PROJECT_STATE.md` and this log.
+
+---
+
+## 2026-05-25 — External Review Assessment And Icon Integration
+
+### Action
+
+Checked a third-party code review against current repository evidence and corrected unsupported conclusions. Added extension icon assets and connected them in `manifest.json`.
+
+### Files Added Or Updated
+
+- `docs/EXTERNAL_CODE_REVIEW_ASSESSMENT_2026-05-22.md`
+- `store-listing/PRIVACY_PRACTICES_DRAFT.md`
+- `docs/CHROME_WEB_STORE_READINESS.md`
+- `icons/icon-16.png`
+- `icons/icon-32.png`
+- `icons/icon-48.png`
+- `icons/icon-128.png`
+- `manifest.json`
+
+### Evidence
+
+- Commit `769fab6`: icon files added and linked through `icons` and `action.default_icon`.
+- Commit `222ad29`: privacy draft corrected so it does not claim speech recognition is fully local.
+- Commit `da3a47f`: review assessment records the missed default-mode mismatch.
+- Commit `bc90d6b`: readiness record updated after icon integration.
+
+### Resulting State
+
+- Missing-icon blocker: resolved at committed-asset level; visual acceptance in Chrome remains needed.
+- Privacy draft: corrected at documentation level; public privacy-policy URL remains missing.
+- Language default: open product mismatch; current code starts in manual Russian mode although the intended default is automatic mode.
+
+### Next Action
+
+Restore `AUTO` as the intended default language mode, then run manual Chrome checks and record the outcome.
